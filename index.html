@@ -36,7 +36,7 @@ const eur=n=>(n<0?"-":"")+Math.abs(n).toFixed(2).replace(".",",")+" €";
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 const uid=()=>Math.random().toString(36).slice(2,10);
-let S={acc:{cash:0,bank:0},exp:[],rec:[]},tab="home",form=null,msg="",month=today().slice(0,7);
+let S={acc:{cash:0,bank:0},exp:[],rec:[]},tab="home",draft=null,msg="",month=today().slice(0,7);
 try{const r=localStorage.getItem("spese_v1");if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
 const MN={cash:"Contanti",bank:"Bancomat"};
 function addDate(s,f,anchor){const d=new Date(s+"T12:00:00");
@@ -52,8 +52,8 @@ function runRec(){let n=0;S.rec.forEach(r=>{let g=0;while(r.next<=today()&&g++<6
  if(n){save();msg=n+" spesa/e ricorrente/i registrata/e in automatico"}}
 if(!(ls("spese_sync")==="1"))runRec();
 function newForm(){return{type:"out",date:today(),desc:"",amount:"",cat:"Alimentari",method:"cash",payer:"me",payerName:"",owe:false,lines:[]}}
-function go(t){tab=t;if(t==="add"&&!form)form=newForm();render()}
-function setF(k,v,rr){form[k]=v;if(rr)render()}
+function go(t){tab=t;if(t==="add"&&!draft)draft=newForm();render()}
+function setF(k,v,rr){draft[k]=v;if(rr){const y=window.scrollY;render();window.scrollTo(0,y)}}
 function nav(){document.getElementById("nav").innerHTML=[["home","Home"],["add","＋ Aggiungi"],["rec","Ricorrenti"],["hist","Storico"]].map(([k,l])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${l}</button>`).join("")}
 function sel(opts,cur,fn){return `<select onchange="${fn}">${opts.map(o=>`<option value="${esc(o[0])}" ${o[0]===cur?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`}
 const catOpts=CATS.map(c=>[c,c]);
@@ -78,21 +78,21 @@ function rmKey(){const p=ls("spese_prov")||"gemini";try{localStorage.removeItem(
 function exportD(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:"application/json"}));a.download="spese-backup-"+today()+".json";document.body.appendChild(a);a.click();a.remove()}
 function importD(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.acc||!Array.isArray(j.exp)||!Array.isArray(j.rec))throw 0;if(!confirm("Sostituire TUTTI i dati attuali con il backup?"))return;S=j;save();msg="Backup importato ✅";render()}catch(e){alert("File di backup non valido")}};r.readAsText(f)}
 function editBal(k){const v=prompt("Saldo attuale "+MN[k]+" (€):",S.acc[k].toFixed(2));if(v===null)return;const n=parseFloat(v.replace(",","."));if(!isNaN(n)){S.acc[k]=n;save();render()}}
-function vAdd(){const f=form,L=f.lines;
+function vAdd(){const f=draft,L=f.lines;
  return `<h1>Nuova voce</h1><div id="msg">${esc(msg)}</div>
  <div class="card"><div class="mu">📷 Scansiona scontrino</div><input id="file" type="file" accept="image/*" capture="environment" style="margin-top:6px" onchange="scan(this)"><div id="scanst" class="mu" style="margin-top:6px"></div></div>
  <div class="card"><div class="seg"><button class="${f.type==="out"?"on":""}" onclick="setF('type','out',1)">Spesa</button><button class="${f.type==="in"?"on":""}" onclick="setF('type','in',1)">Entrata</button></div>
- <label>Descrizione / negozio</label><input value="${esc(f.desc)}" oninput="form.desc=this.value">
- <div class="row"><div><label>Data</label><input type="date" value="${f.date}" onchange="form.date=this.value"></div>
- ${L.length?"":`<div><label>Importo (€)</label><input inputmode="decimal" value="${esc(f.amount)}" oninput="form.amount=this.value"></div>`}</div>
- ${L.length?`<label>Righe scontrino (nome · prezzo · categoria)</label>${L.map((l,i)=>`<div class="line"><input value="${esc(l.name)}" oninput="form.lines[${i}].name=this.value"><input inputmode="decimal" value="${esc(l.price)}" oninput="form.lines[${i}].price=this.value"><select onchange="form.lines[${i}].cat=this.value">${CATS.map(c=>`<option ${c===l.cat?"selected":""}>${c}</option>`).join("")}</select><button class="x" onclick="form.lines.splice(${i},1);render()">✕</button></div>`).join("")}<div class="mu">Totale: <b>${eur(L.reduce((s,l)=>s+(parseFloat(String(l.price).replace(",","."))||0),0))}</b> · verrà diviso per categoria</div>`:`<label>Categoria</label>${sel(catOpts,f.cat,"form.cat=this.value")}`}
+ <label>Descrizione / negozio</label><input value="${esc(f.desc)}" oninput="draft.desc=this.value">
+ <div class="row"><div><label>Data</label><input type="date" value="${f.date}" onchange="draft.date=this.value"></div>
+ ${L.length?"":`<div><label>Importo (€)</label><input inputmode="decimal" value="${esc(f.amount)}" oninput="draft.amount=this.value"></div>`}</div>
+ ${L.length?`<label>Righe scontrino (nome · prezzo · categoria)</label>${L.map((l,i)=>`<div class="line"><input value="${esc(l.name)}" oninput="draft.lines[${i}].name=this.value"><input inputmode="decimal" value="${esc(l.price)}" oninput="draft.lines[${i}].price=this.value"><select onchange="draft.lines[${i}].cat=this.value">${CATS.map(c=>`<option ${c===l.cat?"selected":""}>${c}</option>`).join("")}</select><button class="x" onclick="draft.lines.splice(${i},1);render()">✕</button></div>`).join("")}<div class="mu">Totale: <b>${eur(L.reduce((s,l)=>s+(parseFloat(String(l.price).replace(",","."))||0),0))}</b> · verrà diviso per categoria</div>`:`<label>Categoria</label>${sel(catOpts,f.cat,"draft.cat=this.value")}`}
  <label>${f.type==="in"?"Dove arrivano i soldi":"Metodo di pagamento"}</label><div class="seg"><button class="${f.method==="cash"?"on":""}" onclick="setF('method','cash',1)">💶 Contanti</button><button class="${f.method==="bank"?"on":""}" onclick="setF('method','bank',1)">💳 Bancomat</button></div>
  ${f.type==="out"?`<label>Chi ha pagato?</label><div class="seg"><button class="${f.payer==="me"?"on":""}" onclick="setF('payer','me',1)">Io</button><button class="${f.payer==="other"?"on":""}" onclick="setF('payer','other',1)">Un altro</button></div>
- ${f.payer==="other"?`<label>Chi? (nome)</label><input value="${esc(f.payerName)}" oninput="form.payerName=this.value"><label style="display:flex;gap:8px;align-items:center;color:var(--tx);font-size:14px"><input type="checkbox" style="width:auto" ${f.owe?"checked":""} onchange="form.owe=this.checked"> Devo restituirgli i soldi</label><div class="mu">Non scala nessun saldo tuo.</div>`:`<div class="mu" style="margin-top:6px">Verrà scalato da: <b>${MN[f.method]}</b></div>`}`:""}
+ ${f.payer==="other"?`<label>Chi? (nome)</label><input value="${esc(f.payerName)}" oninput="draft.payerName=this.value"><label style="display:flex;gap:8px;align-items:center;color:var(--tx);font-size:14px"><input type="checkbox" style="width:auto" ${f.owe?"checked":""} onchange="draft.owe=this.checked"> Devo restituirgli i soldi</label><div class="mu">Non scala nessun saldo tuo.</div>`:`<div class="mu" style="margin-top:6px">Verrà scalato da: <b>${MN[f.method]}</b></div>`}`:""}
  <button style="width:100%;margin-top:12px" onclick="submit()">Salva</button></div>
- ${f.type==="out"?`<div class="card"><div class="mu">🔁 Rendi ricorrente</div><div class="row" style="margin-top:6px">${sel([["","No"],["w","Ogni settimana"],["m","Ogni mese"],["y","Ogni anno"]],f.freq||"","form.freq=this.value")}</div><div class="mu">Si registra da sola alle scadenze (solo pagate da te).</div></div>`:""}`}
+ ${f.type==="out"?`<div class="card"><div class="mu">🔁 Rendi ricorrente</div><div class="row" style="margin-top:6px">${sel([["","No"],["w","Ogni settimana"],["m","Ogni mese"],["y","Ogni anno"]],f.freq||"","draft.freq=this.value")}</div><div class="mu">Si registra da sola alle scadenze (solo pagate da te).</div></div>`:""}`}
 function num(v){return parseFloat(String(v).replace(",","."))}
-function submit(){const f=form;let ok=false;
+function submit(){const f=draft;let ok=false;
  if(f.type==="out"&&f.payer==="other"&&!f.payerName.trim()){alert("Scrivi chi ha pagato");return}
  const base={type:f.type,date:f.date,method:f.method,payer:f.type==="in"?"me":f.payer,payerName:f.payerName.trim(),owe:f.type==="out"&&f.payer==="other"&&f.owe,paid:false};
  if(f.lines.length){const g={};f.lines.forEach(l=>{const p=num(l.price);if(p>0)g[l.cat]=(g[l.cat]||0)+p});
@@ -100,7 +100,7 @@ function submit(){const f=form;let ok=false;
  else{const v=num(f.amount);if(!(v>0)){alert("Inserisci un importo valido");return}
   const e={...base,id:uid(),desc:f.desc||(f.type==="in"?"Entrata":f.cat),amount:v,cat:f.type==="in"?"Entrata":f.cat};S.exp.push(e);apply(e,1);ok=true;
   if(f.freq&&f.type==="out"&&f.payer==="me"){const d=new Date(f.date+"T12:00:00");S.rec.push({id:uid(),desc:e.desc,amount:v,cat:f.cat,method:f.method,freq:f.freq,day:d.getDate(),next:addDate(f.date,f.freq,d.getDate())})}}
- if(ok){save();form=null;msg="Salvato ✅";tab="hist";render()}}
+ if(ok){save();draft=null;msg="Salvato ✅";tab="hist";render()}}
 async function scan(inp){const st=document.getElementById("scanst"),file=inp.files[0];if(!file)return;
  st.textContent="Leggo lo scontrino…";
  try{const prov=ls("spese_prov")||"gemini",key=ls("spese_key_"+prov);if(!key)throw new Error("Imposta prima la chiave API: Home → Impostazioni");
@@ -117,8 +117,8 @@ async function scan(inp){const st=document.getElementById("scanst"),file=inp.fil
   }
   const j=JSON.parse(t.slice(t.indexOf("{"),t.lastIndexOf("}")+1));
   if(!j.righe||!j.righe.length)throw new Error("Non sono riuscito a leggere righe, riprova con una foto più nitida");
-  form.desc=j.negozio||"Scontrino";if(j.data&&/^\d{4}-\d\d-\d\d$/.test(j.data))form.date=j.data;
-  form.type="out";form.lines=j.righe.map(x=>({name:x.nome,price:String(x.prezzo),cat:CATS.includes(x.categoria)?x.categoria:"Altro"}));
+  draft.desc=j.negozio||"Scontrino";if(j.data&&/^\d{4}-\d\d-\d\d$/.test(j.data))draft.date=j.data;
+  draft.type="out";draft.lines=j.righe.map(x=>({name:x.nome,price:String(x.prezzo),cat:CATS.includes(x.categoria)?x.categoria:"Altro"}));
   msg="Scontrino letto! Controlla le righe e salva.";render()
  }catch(e){st.textContent="⚠️ "+(e.message||"Errore di lettura")}}
 function shrink(file){return new Promise((res,rej)=>{const img=new Image(),u=URL.createObjectURL(file);
