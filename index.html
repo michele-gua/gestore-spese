@@ -71,16 +71,47 @@ function vHome(){
  <h2>Mese <input type="month" value="${month}" style="width:auto;display:inline-block;margin-left:6px" onchange="month=this.value;render()"></h2>
  <div class="card"><div class="mu">Totale speso</div><div class="big">${eur(tot)}</div><div class="mu">di cui pagato da te: ${eur(mine)} · da altri: ${eur(tot-mine)}</div></div>
  <div class="card">${rows.length?rows.map(([c,v])=>`<div style="margin-bottom:8px"><div class="row"><span>${esc(c)}</span><span style="text-align:right">${eur(v)}</span></div><div class="bar" style="width:${Math.max(3,v/mx*100)}%"></div></div>`).join(""):'<span class="mu">Nessuna spesa questo mese</span>'}</div>${vSet()}`}
-function vSet(){const p=ls("spese_prov")||"gemini",g=p==="gemini";return `<h2>Impostazioni</h2><div class="card"><div class="mu">🤖 Scanner scontrini</div><label>Provider</label><select onchange="setProv(this.value)"><option value="gemini" ${g?"selected":""}>Google Gemini (AI Studio, free tier)</option><option value="anthropic" ${g?"":"selected"}>Anthropic Claude</option></select><label>Chiave API</label><input id="ak" type="password" placeholder="${g?"AIza...":"sk-ant-..."}" value="${esc(ls("spese_key_"+p)||"")}"><label>Modello (vuoto = default)</label><input id="mo" placeholder="${g?"gemini-flash-latest":"claude-sonnet-5-5"}" value="${esc(ls("spese_model_"+p)||"")}"><div class="row" style="margin-top:10px"><button onclick="saveKey()">Salva</button><button class="g" onclick="rmKey()">Rimuovi chiave</button></div><div class="mu" style="margin-top:6px">La chiave resta solo in questo browser. ${g?"Chiave gratis su aistudio.google.com/apikey":"Usa una chiave con limite di spesa basso."}</div></div><div class="card"><div class="mu">💾 Backup (i dati vivono solo in questo browser)</div><div class="row" style="margin-top:6px"><button class="g" onclick="exportD()">Esporta</button><button class="g" onclick="document.getElementById('imp').click()">Importa</button></div><input id="imp" type="file" accept="application/json,.json" style="display:none" onchange="importD(this)"></div>${vSync()}`}
+function vSet(){const p=ls("spese_prov")||"gemini",g=p==="gemini";return `<h2>Impostazioni</h2><div class="card"><div class="mu">🤖 Scanner scontrini</div><label>Provider</label><select onchange="setProv(this.value)"><option value="gemini" ${g?"selected":""}>Google Gemini (AI Studio, free tier)</option><option value="anthropic" ${g?"":"selected"}>Anthropic Claude</option></select><label>Chiave API</label><input id="ak" type="password" placeholder="${g?"AIza...":"sk-ant-..."}" value="${esc(ls("spese_key_"+p)||"")}">${g?vGModel():`<label>Modello (vuoto = default)</label><input id="mo" placeholder="claude-sonnet-5-5" value="${esc(ls("spese_model_"+p)||"")}">`}<div class="row" style="margin-top:10px"><button onclick="saveKey()">Salva</button><button class="g" onclick="rmKey()">Rimuovi chiave</button></div><div class="mu" style="margin-top:6px">La chiave resta solo in questo browser. ${g?"Chiave gratis su aistudio.google.com/apikey":"Usa una chiave con limite di spesa basso."}</div></div><div class="card"><div class="mu">💾 Backup (i dati vivono solo in questo browser)</div><div class="row" style="margin-top:6px"><button class="g" onclick="exportD()">Esporta</button><button class="g" onclick="document.getElementById('imp').click()">Importa</button></div><input id="imp" type="file" accept="application/json,.json" style="display:none" onchange="importD(this)"></div>${vSync()}`}
 function setProv(v){try{localStorage.setItem("spese_prov",v)}catch(e){}render()}
-function saveKey(){const p=ls("spese_prov")||"gemini";try{localStorage.setItem("spese_key_"+p,document.getElementById("ak").value.trim());localStorage.setItem("spese_model_"+p,document.getElementById("mo").value.trim());msg="Salvato ✅"}catch(e){msg="⚠️ Impossibile salvare"}render()}
+// Limiti free tier Gemini (indicativi, misurati a settembre 2026: Google non li pubblica più, vanno per progetto e modello)
+const GM=[
+ {id:"gemini-3.5-flash-lite",n:"Gemini 3.5 Flash-Lite",d:500,m:15,t:"consigliato"},
+ {id:"gemini-3.1-flash-lite",n:"Gemini 3.1 Flash-Lite",d:500,m:15,t:""},
+ {id:"gemini-3.8-flash",n:"Gemini 3.8 Flash",d:20,m:5,t:"più preciso"},
+ {id:"gemini-3.6-flash",n:"Gemini 3.6 Flash",d:20,m:5,t:""},
+ {id:"gemini-3-flash-preview",n:"Gemini 3 Flash (preview)",d:20,m:5,t:""}];
+const gModel=()=>ls("spese_model_gemini")||GM[0].id;
+// Contatore scansioni fatte da questa app (la quota Google si azzera a mezzanotte ora del Pacifico)
+const ptDay=t=>new Date(t).toLocaleDateString("en-CA",{timeZone:"America/Los_Angeles"});
+function useLoad(){try{return JSON.parse(ls("spese_use")||"{}")||{}}catch(e){return{}}}
+function useBump(model){const u=useLoad(),k=ptDay(Date.now());u[k]=u[k]||{};u[k][model]=(u[k][model]||0)+1;
+ const keep=[];for(let i=0;i<14;i++)keep.push(ptDay(Date.now()-i*864e5));Object.keys(u).forEach(d=>{if(!keep.includes(d))delete u[d]});
+ try{localStorage.setItem("spese_use",JSON.stringify(u))}catch(e){}
+ const el=document.getElementById("uline");if(el)el.innerHTML=gUse(model)}
+function useGet(model){const u=useLoad();let d=0,w=0;
+ for(let i=0;i<7;i++){const n=(u[ptDay(Date.now()-i*864e5)]||{})[model]||0;w+=n;if(i===0)d=n}
+ return{d,w}}
+function gUse(model){const u=useGet(model),x=GM.find(y=>y.id===model);
+ return `Usate da questa app: oggi <b>${u.d}${x?" / "+x.d:""}</b> · ultimi 7 giorni <b>${u.w}</b>${x&&u.d>=x.d?" · ⚠️ limite di oggi raggiunto":""}`}
+function gLim(id){const x=GM.find(y=>y.id===id);
+ const head=ls("spese_prov")==="anthropic"||!id?"":gUse(id)+"<br>";
+ if(!x)return head+"Modello personalizzato: i limiti non sono noti, controllali su aistudio.google.com/rate-limit";
+ return head+`Piano gratuito: circa <b>${x.d}</b> scansioni al giorno · ${x.m} al minuto · al massimo ~${x.d*7} a settimana. Non esiste un tetto settimanale vero e proprio: conta solo quello giornaliero, che si azzera a mezzanotte ora del Pacifico (circa le 09:00 in Italia). Ogni scansione = 1 richiesta.<br>Valori indicativi (settembre 2026): Google non li pubblica più e possono variare per progetto. Il contatore conta solo ciò che fai da questa app, su questo dispositivo.`}
+function vGModel(){const cur=gModel(),known=GM.some(x=>x.id===cur);
+ return `<label>Modello Gemini</label><select id="mosel" onchange="gmChange(this.value)">${GM.map(x=>`<option value="${x.id}" ${x.id===cur?"selected":""}>${x.n} · ${x.d}/giorno${x.t?" · "+x.t:""}</option>`).join("")}<option value="__custom" ${known?"":"selected"}>Altro (scrivi il nome)…</option></select><input id="mo" placeholder="gemini-..." value="${known?"":esc(cur)}" style="margin-top:6px;${known?"display:none":""}" oninput="document.getElementById('glim').innerHTML=gLim(this.value.trim())"><div class="mu" id="glim" style="margin-top:6px">${gLim(cur)}</div>`}
+function gmChange(v){const mo=document.getElementById("mo"),c=v==="__custom";mo.style.display=c?"":"none";
+ if(c){mo.value="";mo.focus();document.getElementById("glim").innerHTML=gLim("")}
+ else{try{localStorage.setItem("spese_model_gemini",v)}catch(e){}document.getElementById("glim").innerHTML=gLim(v)}}
+function saveKey(){const p=ls("spese_prov")||"gemini";try{localStorage.setItem("spese_key_"+p,document.getElementById("ak").value.trim());
+ let m=document.getElementById("mo").value.trim();if(p==="gemini"){const s=document.getElementById("mosel").value;if(s!=="__custom")m=s}
+ localStorage.setItem("spese_model_"+p,m);msg="Salvato ✅"}catch(e){msg="⚠️ Impossibile salvare"}render()}
 function rmKey(){const p=ls("spese_prov")||"gemini";try{localStorage.removeItem("spese_key_"+p)}catch(e){}msg="Chiave rimossa";render()}
 function exportD(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:"application/json"}));a.download="spese-backup-"+today()+".json";document.body.appendChild(a);a.click();a.remove()}
 function importD(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.acc||!Array.isArray(j.exp)||!Array.isArray(j.rec))throw 0;if(!confirm("Sostituire TUTTI i dati attuali con il backup?"))return;S=j;save();msg="Backup importato ✅";render()}catch(e){alert("File di backup non valido")}};r.readAsText(f)}
 function editBal(k){const v=prompt("Saldo attuale "+MN[k]+" (€):",S.acc[k].toFixed(2));if(v===null)return;const n=parseFloat(v.replace(",","."));if(!isNaN(n)){S.acc[k]=n;save();render()}}
 function vAdd(){const f=draft,L=f.lines;
  return `<h1>Nuova voce</h1><div id="msg">${esc(msg)}</div>
- <div class="card"><div class="mu">📷 Scansiona scontrino</div><input id="file" type="file" accept="image/*" capture="environment" style="margin-top:6px" onchange="scan(this)"><div id="scanst" class="mu" style="margin-top:6px"></div></div>
+ <div class="card"><div class="mu">📷 Scansiona scontrino</div><input id="file" type="file" accept="image/*" capture="environment" style="margin-top:6px" onchange="scan(this)"><div id="scanst" class="mu" style="margin-top:6px"></div>${(ls("spese_prov")||"gemini")==="gemini"?`<div id="uline" class="mu" style="margin-top:4px">${gUse(gModel())}</div>`:""}</div>
  <div class="card"><div class="seg"><button class="${f.type==="out"?"on":""}" onclick="setF('type','out',1)">Spesa</button><button class="${f.type==="in"?"on":""}" onclick="setF('type','in',1)">Entrata</button></div>
  <label>Descrizione / negozio</label><input value="${esc(f.desc)}" oninput="draft.desc=this.value">
  <div class="row"><div><label>Data</label><input type="date" value="${f.date}" onchange="draft.date=this.value"></div>
@@ -107,8 +138,8 @@ async function scan(inp){const st=document.getElementById("scanst"),file=inp.fil
   const blob=await shrink(file);const b64=await new Promise(rs=>{const fr=new FileReader();fr.onload=()=>rs(fr.result.split(",")[1]);fr.readAsDataURL(blob)});
   let t;
   if(prov==="gemini"){
-   const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(ls("spese_model_gemini")||"gemini-flash-latest")+":generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts:[{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}]}],generationConfig:{responseMimeType:"application/json"}})});
-   const d=await rr.json();if(!rr.ok)throw new Error(rr.status===429?"Limite gratuito raggiunto, riprova tra un minuto":(d.error&&d.error.message)||"Errore "+rr.status);
+   const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(gModel())+":generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts:[{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}]}],generationConfig:{responseMimeType:"application/json"}})});
+   if(rr.status!==429)useBump(gModel());const d=await rr.json();if(!rr.ok)throw new Error(rr.status===429?"Limite gratuito raggiunto, riprova tra un minuto":(d.error&&d.error.message)||"Errore "+rr.status);
    t=((d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts)||[]).map(x=>x.text||"").join("")
   }else{
    const rr=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:ls("spese_model_anthropic")||"claude-sonnet-5-5",max_tokens:2000,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:PROMPT}]}]})});
